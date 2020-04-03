@@ -1,0 +1,8 @@
+#+TITLE: Haskell Nix Template
+
+
+https://raw.githubusercontent.com/NixOS/nixpkgs/master/pkgs/development/haskell-modules/hackage-packages.nix
+https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/haskell-modules/hackage-packages.nix
+
+~cachix use pre-commit-hooks~
+https://github.com/cachix/pre-commit-hooks.nix
