@@ -1,8 +1,29 @@
-#+TITLE: Haskell Nix Template
+#+TITLE: Data types a` la carte
 
+* TODO explain the experssion problem
 
-https://raw.githubusercontent.com/NixOS/nixpkgs/master/pkgs/development/haskell-modules/hackage-packages.nix
-https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/haskell-modules/hackage-packages.nix
+* Fixing the expression problem
 
-~cachix use pre-commit-hooks~
-https://github.com/cachix/pre-commit-hooks.nix
+Parameterize the experession data type
+
+#+begin_src haskell
+data Expr f = In (f (Expr f))
+#+end_src
+
+You may want to think ~f~ as the signature of the constructors. Kind of ~f~ is
+~*->*~
+
+The Key idea is to combine expreissions by taking the coproduct of their
+signatures.
+
+Coproduct is a fancy way for Sum type
+
+~data (f :+:g) e = Inl (f e) | Inr (g e)~
+
+#+begin_src haskell
+data CoProduct f g e = Inl (f e) | Inr (g e)
+#+end_src
+kind of ~f~ and ~g~ is ~*->*~
+
+** TODO proof ~CoProduct Val Add~ is the orignal ~Expr~.
+** TODO find the definition of `injection`
