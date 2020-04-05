@@ -80,7 +80,7 @@ instance {-# OVERLAPPABLE #-}
 inject :: (g :<: f) => g (Expr f) -> Expr f
 inject = In . inj
 
-val ::  (Val :<: f) => Int -> Expr f
+val :: (Val :<: f) => Int -> Expr f
 val x = inject (Val x)
 
 infixl 6 ⊕
