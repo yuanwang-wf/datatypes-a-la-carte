@@ -1,101 +1,111 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
--- https://typeclasses.com/ghc/type-operators
-{-# LANGUAGE TypeOperators #-}
-
+{-# LANGUAGE EmptyCase#-}
+{-# LANGUAGE TypeOperators#-}
 module Main where
 
 import GHC.Generics
 
-newtype Expr f = In (f (Expr f))
-
---data (f :+: g) e = Inl (f e) | Inr (g e)
-
---infix 8 :+:
-
--- e is phantom type for type safey
-newtype Val e = Val Int
-
-type IntExpr = Expr Val
-
-data Add e = Add e e
-
-type AddExpr = Expr Add
-
-data Mul x = Mul x x
-
-instance Functor Val where
-  fmap _ (Val e) = Val e
-
-instance Functor Add where
-  fmap f (Add left right) = Add (f left) (f right)
-
-instance Functor Mul where
-  fmap f (Mul left right) = Mul (f left) (f right)
-
---instance (Functor f, Functor g) => Functor (f :+:  g) where
---  fmap h (Inl l) = Inl (fmap h l)
---  fmap h (Inr r) = Inr (fmap h r)
-
-foldExpr :: Functor f => (f a -> a) -> Expr f -> a
-foldExpr f (In t) = f (fmap (foldExpr f) t)
-
-class Functor f => Eval f where
-  evalAlgebra :: f Int -> Int
-
-instance Eval Val where
-  evalAlgebra (Val x) = x
-
-instance Eval Add where
-  evalAlgebra (Add l r) = l + r
-
-instance (Eval f, Eval g) => Eval (f :+: g) where
-  evalAlgebra (L1 l) = evalAlgebra l
-  evalAlgebra (R1 r) = evalAlgebra r
-
-instance Eval Mul where
-  evalAlgebra (Mul l r) = l * r
-
-eval :: Eval f => Expr f -> Int
-eval = foldExpr evalAlgebra
-
-class (Functor sub, Functor sup) => sub :<: sup where
-  inj :: sub a -> sup a
-
-instance Functor f =>  f :<: f where
-  inj = id
-
-instance (Functor f, Functor g) => f :<: ( f :+: g) where
-  inj = L1
-
---instance (Functor f, Functor g) =>  g :<: ( f :+: g) where
---  inj = Inr
+data Free f a
+  = Var a
+  | Op (f (Free f a))
 
 
-instance {-# OVERLAPPABLE #-}
-         (Functor f, Functor g, Functor h, f :<: g) => f :<: ( h :+: g) where
-  inj = R1 . inj
+data Or k = Or k k
+instance Functor Or where
+  fmap f (Or xs ys) = Or (f xs) (f ys)
 
-inject :: (g :<: f) => g (Expr f) -> Expr f
-inject = In . inj
+a :: Free Or Int
+a = Op (Or (Var 3) (Var 4))
 
-val :: (Val :<: f) => Int -> Expr f
-val x = inject (Val x)
+type Alg f a = f a -> a
 
-infixl 6 ⊕
+-- simailr to foldExpr
+eval :: Functor f => (f b -> b) -> (a -> b) -> Free f a -> b
+eval _ gen (Var x) = gen x
+eval alg gen (Op x) = alg (fmap (eval alg gen) x)
 
-(⊕) :: (Add :<: f) => Expr f -> Expr f -> Expr f
-x ⊕ y = inject (Add x y)
+-- identity monad ? or Const
+data Stop k = Stop
+instance Functor Stop where
+  fmap _ Stop = Stop
 
-infixl 7 ⊗
+fail :: Free Stop a -> Maybe a
+fail = eval alg gen where
+  alg :: Stop (Maybe a) -> Maybe a
+  alg Stop = Nothing
 
-(⊗) :: (Mul :<: f) => Expr f -> Expr f -> Expr f
-x ⊗ y = inject (Mul x y)
+  gen :: a -> Maybe a
+  gen = Just
+
+once :: Free Or a -> a
+once = eval alg gen where
+
+  alg :: Or a -> a
+  alg (Or xs _) = xs
+
+  gen :: a -> a
+  gen = id
+
+b :: Free Stop Int
+b = Var 3
+
+c :: Free Stop Int
+c = Op Stop
+
+data Void k
+
+instance Functor Void where
+  fmap _ _ = undefined
+
+run :: Free Void a -> a
+run = eval alg id where
+  alg :: Void a -> a
+  alg x = case x of {}
+
+d :: Free Void Int
+d = Var 666
+
+-- data (f :+ sig) a = Eff (f a) | Sig (sig a)
+embed :: Functor g => (f (Free g a) -> Free g a) -> ((f :+: g) (Free g a) -> Free g a)
+embed alg (L1 x) = alg x
+embed _ (R1 x) = Op x
+
+-- exception
+fail' :: Functor f => Free (Stop :+: f) a -> Free f (Maybe a)
+fail' = eval (embed alg) gen where
+  gen x = Var (Just x)
+  alg Stop = Var Nothing
 
 
+instance Functor f => Functor (Free f) where
+  fmap f (Var k) = Var (f k)
+  fmap f (Op o) = Op $ (fmap . fmap) f o
+
+
+instance Functor f => Applicative (Free f) where
+  pure = Var
+
+  Var f <*> o = fmap f o
+  Op x <*> y = Op (fmap (<*> y) x)
+
+
+instance Functor f => Monad (Free f) where
+  Var k >>= f = f k
+  Op z >>= f = Op $ fmap (>>= f) z
+
+-- Nondeterminism
+list :: Functor f => Free (Or :+: f) a -> Free f [a]
+list = eval (embed alg) gen where
+  gen x = Var [x]
+  alg (Or mx my) = do xs <- mx
+                      ys <- my
+                      Var (xs ++ ys)
+
+
+global :: Functor f => Free (Or :+: Stop :+: f) a -> Free f (Maybe [a])
+global = fail' . list
+
+local :: Functor f => Free (Stop :+: Or :+: f) a -> Free f [Maybe a]
+local = list . fail'
 
 main :: IO ()
-main = print $ eval x
- where x :: Expr (Val :+: Add :+: Mul)
-       x = val 80  ⊗ val 5 ⊕ val 4
+main = print $ run d
