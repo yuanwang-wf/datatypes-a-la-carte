@@ -28,6 +28,8 @@ kind of ~f~ and ~g~ is ~*->*~
 ** TODO proof ~CoProduct Val Add~ is the orignal ~Expr~.
 ** TODO find the definition of `injection`
 
+https://mathworld.wolfram.com/Injection.html
+
 combine monad using coproduct
 
 
@@ -50,8 +52,6 @@ newtype Expr f = In (f (Expr f))
 
 -- e is phantom type for type safey
 newtype Val e = Val Int
-
-type IntExpr = Expr Val
 
 data Add e = Add e e
 
