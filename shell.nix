@@ -1,4 +1,4 @@
-{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghc882" }:
+{ nixpkgs ? import <nixpkgs> {}, compiler ? "ghc883" }:
 let
   bootstrap = import <nixpkgs> {};
 
@@ -14,7 +14,6 @@ let
   myHaskellPackages = pkgs.haskell.packages."${compiler}";
 
   # myPackages = myHaskellPackages.callCabal2nix "project" ./blog.cabal {};
-  all-hies = import (fetchTarball "https://github.com/infinisil/all-hies/tarball/master") {};
 in
 myHaskellPackages.shellFor {
   withHoogle = true;
@@ -28,6 +27,5 @@ myHaskellPackages.shellFor {
       ormolu
       cabal-install
       cabal-fmt
-      (all-hies.selection { selector = p: { inherit (p) ghc882; }; })
     ];
 }
