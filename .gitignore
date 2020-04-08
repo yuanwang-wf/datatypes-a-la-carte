@@ -2,7 +2,7 @@
 .idea
 *.log
 tmp/
-
+result
 
 dist
 dist-*
