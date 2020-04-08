@@ -13,11 +13,11 @@ let
   pkgs = import src {};
   myHaskellPackages = pkgs.haskell.packages."${compiler}";
 
-  # myPackages = myHaskellPackages.callCabal2nix "project" ./blog.cabal {};
+  myPackages = myHaskellPackages.callCabal2nix "project" ./datatypes-a-la-carte.cabal {};
 in
 myHaskellPackages.shellFor {
   withHoogle = true;
-  packages = p: [];
+  packages = p: [ myPackages ];
   inherit ((import ./pre-commit.nix).pre-commit-check) shellHook;
   buildInputs = with myHaskellPackages;
     [
