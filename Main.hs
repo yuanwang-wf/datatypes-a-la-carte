@@ -1,111 +1,55 @@
-{-# LANGUAGE EmptyCase#-}
-{-# LANGUAGE TypeOperators#-}
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeOperators #-}
+
 module Main where
 
-import GHC.Generics
+import Polysemy
+import System.Random (randomIO)
 
-data Free f a
-  = Var a
-  | Op (f (Free f a))
+data Console m a where
+  PrintLine :: String -> Console m ()
+  ReadLine :: Console m String
 
+makeSem ''Console
 
-data Or k = Or k k
-instance Functor Or where
-  fmap f (Or xs ys) = Or (f xs) (f ys)
+runConsoleIO ::
+  Member (Embed IO) r =>
+  Sem (Console ': r) a ->
+  Sem r a
+runConsoleIO = interpret $ \case
+  PrintLine line -> embed $ putStrLn line
+  ReadLine -> embed getLine
 
-a :: Free Or Int
-a = Op (Or (Var 3) (Var 4))
+--printLine :: Member Console r => String -> Sem r ()
+--readLine :: Member Console r => Sem r String
 
-type Alg f a = f a -> a
+data Random v m a where
+  NextRandom :: Random v m v
 
--- simailr to foldExpr
-eval :: Functor f => (f b -> b) -> (a -> b) -> Free f a -> b
-eval _ gen (Var x) = gen x
-eval alg gen (Op x) = alg (fmap (eval alg gen) x)
+makeSem ''Random
 
--- identity monad ? or Const
-data Stop k = Stop
-instance Functor Stop where
-  fmap _ Stop = Stop
+runRandomIO :: Member (Embed IO) r => Sem (Random Int ': r) a -> Sem r a
+runRandomIO = interpret $ \case
+  NextRandom -> embed randomIO
 
-fail :: Free Stop a -> Maybe a
-fail = eval alg gen where
-  alg :: Stop (Maybe a) -> Maybe a
-  alg Stop = Nothing
-
-  gen :: a -> Maybe a
-  gen = Just
-
-once :: Free Or a -> a
-once = eval alg gen where
-
-  alg :: Or a -> a
-  alg (Or xs _) = xs
-
-  gen :: a -> a
-  gen = id
-
-b :: Free Stop Int
-b = Var 3
-
-c :: Free Stop Int
-c = Op Stop
-
-data Void k
-
-instance Functor Void where
-  fmap _ _ = undefined
-
-run :: Free Void a -> a
-run = eval alg id where
-  alg :: Void a -> a
-  alg x = case x of {}
-
-d :: Free Void Int
-d = Var 666
-
--- data (f :+ sig) a = Eff (f a) | Sig (sig a)
-embed :: Functor g => (f (Free g a) -> Free g a) -> ((f :+: g) (Free g a) -> Free g a)
-embed alg (L1 x) = alg x
-embed _ (R1 x) = Op x
-
--- exception
-fail' :: Functor f => Free (Stop :+: f) a -> Free f (Maybe a)
-fail' = eval (embed alg) gen where
-  gen x = Var (Just x)
-  alg Stop = Var Nothing
-
-
-instance Functor f => Functor (Free f) where
-  fmap f (Var k) = Var (f k)
-  fmap f (Op o) = Op $ (fmap . fmap) f o
-
-
-instance Functor f => Applicative (Free f) where
-  pure = Var
-
-  Var f <*> o = fmap f o
-  Op x <*> y = Op (fmap (<*> y) x)
-
-
-instance Functor f => Monad (Free f) where
-  Var k >>= f = f k
-  Op z >>= f = Op $ fmap (>>= f) z
-
--- Nondeterminism
-list :: Functor f => Free (Or :+: f) a -> Free f [a]
-list = eval (embed alg) gen where
-  gen x = Var [x]
-  alg (Or mx my) = do xs <- mx
-                      ys <- my
-                      Var (xs ++ ys)
-
-
-global :: Functor f => Free (Or :+: Stop :+: f) a -> Free f (Maybe [a])
-global = fail' . list
-
-local :: Functor f => Free (Stop :+: Or :+: f) a -> Free f [Maybe a]
-local = list . fail'
+program ::
+  Member Console r =>
+  Member (Random Int) r =>
+  Sem r Int
+program = do
+  printLine "Insert your number:"
+  i1 <- readLine
+  i2 <- nextRandom
+  pure (read i1 + i2)
 
 main :: IO ()
-main = print $ run d
+main = execute >>= print
+  where
+    execute = runM . runRandomIO . runConsoleIO $ program
